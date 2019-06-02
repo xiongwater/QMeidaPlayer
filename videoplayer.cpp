@@ -202,7 +202,7 @@ static int audio_decode_frame(VideoState *is, double *pts_ptr)
             *pts_ptr = pts;
             n = 2 * is->audio_stream->codec->channels;
             is->audio_clock += (double) resampled_data_size
-                    / (double) (n * is->audio_stream->codec->sample_rate);
+				/ (double) (n * is->audio_stream->codec->sample_rate);
 
             // We have data, return it and come back for more later
             return resampled_data_size;
@@ -370,42 +370,6 @@ int audio_stream_component_open(VideoState *is, int stream_index)
     wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;  // 自定义SDL缓冲区大小
     wanted_spec.callback = audio_callback;        // 音频解码的关键回调函数
     wanted_spec.userdata = is;                    // 传给上面回调函数的外带数据
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//    SDL_AudioDeviceID audioID = 1;// = SDL_OpenAudioDevice("",0,&wanted_spec, &spec,1);///////////////////
-//    int num = SDL_GetNumAudioDevices(0);//////////////////////////////////////////////////////////////////
-//    for (int i=0;i<num;i++)///////////////////////////////////////////////////////////////////////////////
-//    {
-//        qDebug()<<SDL_GetAudioDeviceName(i,0);
-//    }
-
-//    ///  打开SDL播放设备 - 开始
-//    SDL_LockAudio();
-//    SDL_AudioSpec spec;
-//    SDL_AudioSpec wanted_spec;
-//    wanted_spec.freq = aCodecCtx->sample_rate;
-//    wanted_spec.format = AUDIO_S16SYS;
-//    wanted_spec.channels = aCodecCtx->channels;
-//    wanted_spec.silence = 0;
-//    wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
-//    wanted_spec.callback = audio_callback;
-//    wanted_spec.userdata = &mVideoState;
-//    if(SDL_OpenAudio(&wanted_spec, &spec) < 0)
-//    {
-//        fprintf(stderr, "SDL_OpenAudio: %s\n", SDL_GetError());
-//        return;
-//    }
-//    SDL_UnlockAudio();
-//    SDL_PauseAudio(0);
-//    ///  打开SDL播放设备 - 结束
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-    /*  打开音频设备，这里使用一个while来循环尝试打开不同的声道数(由上面 */
-    /*  next_nb_channels数组指定）直到成功打开，或者全部失败 */
-//    while (SDL_OpenAudio(&wanted_spec, &spec) < 0) {
-
-
     do {
         is->audioID = SDL_OpenAudioDevice(SDL_GetAudioDeviceName(0,0),0,&wanted_spec, &spec,0);
         fprintf(stderr,"SDL_OpenAudio (%d channels): %s\n",wanted_spec.channels, SDL_GetError());
@@ -534,51 +498,30 @@ int video_thread(void *arg)
         }
 
         video_pts *= av_q2d(is->video_st->time_base);//timebase表示每个格子多少秒，乘积就表示当前的播放秒数
-       // video_pts = synchronize_video(is, pFrame, video_pts);
-
-		//writeLog("", "", "同步开始");
-        while(1)
-        {
-			if (is->video_thread_status.IsQuitCmd())
-			{
-				break;//检测到退出指令
-			}
-			//当音频结束，也就是说音频时间不会变动
-            audio_pts = is->audio_clock;
-            if (video_pts <= audio_pts) break;
-
-            unsigned int delayTime = (video_pts - audio_pts) * 1000;
-
-            delayTime = delayTime > 5 ? 5:delayTime;
-
-            SDL_Delay(delayTime);
-        }
-		//writeLog("", "", "同步完成，开始转码");
-
-		//audio_pts = is->audio_clock;
-		//int delayTime = (video_pts - audio_pts) * 1000;
-
-		//if (delayTime > 0)
-		//{
-		//	//SDL_Delay(delayTime = delayTime > 5 ? 5 : delayTime);
-		//	SDL_Delay(delayTime);
-		//}
-
-
-
         if (got_picture) {
             sws_scale(img_convert_ctx,(uint8_t const * const *) pFrame->data,pFrame->linesize, 0, pCodecCtx->height, pFrameRGB->data,pFrameRGB->linesize);
             //把这个RGB数据 用QImage加载
             QImage tmpImg((uchar *)out_buffer_rgb,pCodecCtx->width,pCodecCtx->height,QImage::Format_RGB32);
             QImage image = tmpImg.copy(); //把图像复制一份 传递给界面显示
-			WaterMarker::add(image, QStringLiteral("全幼儿园最呆萌") );
-			//writeLog("", "", "准备绘图");
+			WaterMarker::add(image, QStringLiteral("一帆风顺好运来，万事如意发大财") );
+			while (1)
+			{
+				if (is->video_thread_status.IsQuitCmd())
+				{
+					break;//检测到退出指令
+				}
+				//当音频结束，也就是说音频时间不会变动
+				audio_pts = is->audio_clock;
+				if (video_pts <= audio_pts) {
+					break;//小于音频就转码播放 
+				}
+				unsigned int delayTime = (video_pts - audio_pts) * 1000;
+				delayTime = delayTime > 5 ? 5 : delayTime;
+				SDL_Delay(delayTime);
+			}
             is->player->disPlayVideo(image); //调用激发信号的函数
-			//writeLog("", "", "绘图完成");
         }
-
         av_free_packet(packet);
-		//writeLog("", "", "视频解包一帧完成");
     }
 
     av_free(pFrame);
@@ -592,7 +535,7 @@ int video_thread(void *arg)
 VideoPlayer::VideoPlayer(QObject *parent)
 	:QThread(parent)
 {
-
+	isPause = false;
 }
 
 VideoPlayer::~VideoPlayer()
@@ -647,7 +590,7 @@ void VideoPlayer::QuitChildThread()
 
 void VideoPlayer::startPlay()
 {
-    ///调用 QThread 的start函数 将会自动执行下面的run函数 run函数是一个新的线程
+    //调用 QThread 的start函数 将会自动执行下面的run函数 run函数是一个新的线程
 	QuitChildThread();//退出子线程 重新开始
     this->start();
 
@@ -656,7 +599,8 @@ void VideoPlayer::startPlay()
 void VideoPlayer::run()
 {
 
-	QByteArray byteArry = mFileName.toLatin1();
+	//QByteArray byteArry = mFileName.toLatin1();
+	QByteArray byteArry = mFileName.toLocal8Bit();
 	char *file_path = byteArry.data();
 	//char* charSource = byteArry.data();
    // char *file_path = mFileName.toUtf8().data();
@@ -810,4 +754,16 @@ void VideoPlayer::run()
     avcodec_close(pVideoCodecCtx);
     avformat_close_input(&pFormatCtx);
 	m_read_status.StatueEnd();
+}
+void VideoPlayer::PauseOrResume()
+{
+	isPause = !isPause;
+	if (isPause)
+	{
+		SDL_PauseAudioDevice(mVideoState.audioID, 1);
+	}
+	else
+	{
+		SDL_PauseAudioDevice(mVideoState.audioID, 0);
+	}
 }

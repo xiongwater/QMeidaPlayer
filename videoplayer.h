@@ -156,7 +156,7 @@ public:
     uint8_t *audio_pkt_data;
     int audio_pkt_size;
     uint8_t *audio_buf;
-    DECLARE_ALIGNED(16,uint8_t,audio_buf2) [AVCODEC_MAX_AUDIO_FRAME_SIZE * 4];//静态素组缓存 用于缓存音频数据
+    DECLARE_ALIGNED(16,uint8_t,audio_buf2) [AVCODEC_MAX_AUDIO_FRAME_SIZE * 4];//静态数组缓存 用于缓存音频数据
     enum AVSampleFormat audio_src_fmt;
     enum AVSampleFormat audio_tgt_fmt;
     int audio_src_channels;
@@ -194,6 +194,7 @@ public:
     void setFileName(QString path){mFileName = path;}
 
     void startPlay();
+	void PauseOrResume();
 
     void disPlayVideo(QImage img);
 
@@ -213,6 +214,7 @@ private:
     VideoState mVideoState;//存储视频状态
 
 	ThreadStatus m_read_status;
+	bool isPause;
 
 
 };
